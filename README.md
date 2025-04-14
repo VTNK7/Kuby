@@ -1,0 +1,2 @@
+# Lina
+CICD deployment kubernetes
