@@ -1,0 +1,27 @@
+---
+# test.yml - Vérification de la connectivité Ansible avec tous les nœuds
+- name: Vérifier la connectivité avec tous les nœuds
+  hosts: k8s_cluster
+  gather_facts: yes  # Cette tâche vérifiera automatiquement la connectivité
+  tasks:
+    - name: Récupérer le hostname du nœud
+      command: hostname
+      register: node_hostname
+      changed_when: false
+
+    - name: Afficher les informations du nœud
+      debug:
+        msg: 
+          - "Nœud: {{ inventory_hostname }}"
+          - "Hostname: {{ node_hostname.stdout }}"
+          - "Distribution: {{ ansible_distribution }} {{ ansible_distribution_version }}"
+          - "IP: {{ ansible_default_ipv4.address }}"
+          - "État: Connexion réussie!"
+
+
+- name: Résumé de la connectivité
+  hosts: jumpbox
+  tasks:
+    - name: Afficher le résumé
+      debug:
+        msg: "Test de connectivité terminé. Tous les nœuds sont accessibles!"

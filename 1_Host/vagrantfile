@@ -1,0 +1,111 @@
+# -*- mode: ruby -*-
+# vi: set ft=ruby :
+
+Vagrant.configure("2") do |config|
+  
+  # Configuration commune
+  config.vm.box = "debian/bookworm64"
+  
+  # Réseau privé pour la communication entre VMs
+  private_network_prefix = "192.168.56"
+  
+  config.vm.define "jumpbox" do |jumpbox|
+    jumpbox.vm.hostname = "jumpbox"
+    jumpbox.vm.network "private_network", ip: "#{private_network_prefix}.10"
+    jumpbox.vm.provider "virtualbox" do |vb|
+      vb.memory = "512"
+      vb.cpus = 1
+    end
+  
+    # Copier le dossier config_asset vers la machine virtuelle
+    jumpbox.vm.provision "file", source: "./config_asset/", destination: "/tmp/config_asset"
+    jumpbox.vm.synced_folder "./ansible", "/etc/ansible"
+  
+    # Installation d'Ansible et des outils nécessaires
+    jumpbox.vm.provision "shell", inline: <<-SHELL
+      # Exécution du script Zscaler pour mettre à jour les certificats
+      chmod +x /tmp/config_asset/zscaler_setup.sh
+      /tmp/config_asset/zscaler_setup.sh
+  
+      # Installation des packages
+      apt-get update
+      apt-get install -y ansible python3-pip curl wget
+      pip3 install netaddr jmespath
+  
+      # Générer une nouvelle paire de clés SSH pour Ansible
+      ssh-keygen -t rsa -N "" -f /home/vagrant/.ssh/id_rsa
+      chown vagrant:vagrant /home/vagrant/.ssh/id_rsa*
+      chmod 600 /home/vagrant/.ssh/id_rsa*
+  
+      # Copier la clé publique pour partage ultérieur
+      cp /home/vagrant/.ssh/id_rsa.pub /vagrant/jumpbox_id_rsa.pub
+    SHELL
+  end
+
+      # Master Kubernetes
+      config.vm.define "master" do |master|
+        master.vm.hostname = "master"
+        master.vm.network "private_network", ip: "#{private_network_prefix}.100"
+        master.vm.provider "virtualbox" do |vb|
+          vb.memory = "2048"
+          vb.cpus = 2
+        end
+        
+  
+        # Copier le dossier config_asset vers la machine virtuelle
+        master.vm.provision "file", source: "./config_asset/", destination: "/tmp/config_asset"
+        
+        # Installation d'Ansible et des outils nécessaires
+        master.vm.provision "shell", inline: <<-SHELL
+          # Exécution du script Zscaler pour mettre à jour les certificats
+          chmod +x /tmp/config_asset/zscaler_setup.sh
+          /tmp/config_asset/zscaler_setup.sh
+  
+          # Configuration SSH
+          apt-get update
+          # Copier la clé publique de jumpbox
+          if [ -f /vagrant/jumpbox_id_rsa.pub ]; then
+            mkdir -p /home/vagrant/.ssh
+            cat /vagrant/jumpbox_id_rsa.pub >> /home/vagrant/.ssh/authorized_keys
+            chmod 700 ~/.ssh
+            chmod 600 /home/vagrant/.ssh/authorized_keys
+            chown vagrant:vagrant /home/vagrant/.ssh/authorized_keys
+          fi
+        SHELL
+      end
+      
+      # Workers
+      (1..2).each do |i|
+        config.vm.define "worker-#{i}" do |worker|
+          worker.vm.hostname = "worker-#{i}"
+          worker.vm.network "private_network", ip: "#{private_network_prefix}.10#{i}"
+          worker.vm.provider "virtualbox" do |vb|
+            vb.memory = "2048"
+            vb.cpus = 2
+          end
+          
+  
+          # Copier le dossier config_asset vers la machine virtuelle
+          worker.vm.provision "file", source: "./config_asset/", destination: "/tmp/config_asset"
+        
+          # Installation d'Ansible et des outils nécessaires
+          worker.vm.provision "shell", inline: <<-SHELL
+            # Exécution du script Zscaler pour mettre à jour les certificats
+            chmod +x /tmp/config_asset/zscaler_setup.sh
+            /tmp/config_asset/zscaler_setup.sh
+  
+  
+            apt-get update
+            # Copier la clé publique de jumpbox
+            if [ -f /vagrant/jumpbox_id_rsa.pub ]; then
+              mkdir -p /home/vagrant/.ssh
+              cat /vagrant/jumpbox_id_rsa.pub >> /home/vagrant/.ssh/authorized_keys
+              chmod 700 ~/.ssh
+              chmod 600 /home/vagrant/.ssh/authorized_keys
+              chown vagrant:vagrant /home/vagrant/.ssh/authorized_keys
+            fi
+          SHELL
+        end
+      end
+
+end
