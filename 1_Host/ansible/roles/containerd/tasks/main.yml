@@ -1,0 +1,44 @@
+# roles/containerd/tasks/main.yml
+---
+- name: Add the official Docker GPG key
+  ansible.builtin.command:
+    cmd: "curl -fsSL https://download.docker.com/linux/debian/gpg | gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg"
+    creates: /usr/share/keyrings/docker-archive-keyring.gpg
+
+- name: Add the Docker repository
+  apt_repository:
+    repo: "deb [arch=amd64 signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/debian {{ ansible_distribution_release }} stable"
+    state: present
+    filename: docker
+
+- name: Install containerd
+  apt:
+    name: containerd.io
+    state: present
+    update_cache: yes
+
+- name: Create containerd configuration directory
+  file:
+    path: /etc/containerd
+    state: directory
+    mode: '0755'
+
+- name: Generate default containerd configuration
+  shell: containerd config default > /etc/containerd/config.toml
+  args:
+    creates: /etc/containerd/config.toml
+  notify: Redémarrer containerd
+
+- name: Configure cgroup driver for systemd
+  replace:
+    path: /etc/containerd/config.toml
+    regexp: 'SystemdCgroup = false'
+    replace: 'SystemdCgroup = true'
+  notify: Redémarrer containerd
+
+- name: Ensure containerd is enabled and started
+  systemd:
+    name: containerd
+    state: started
+    enabled: yes
+    daemon_reload: yes

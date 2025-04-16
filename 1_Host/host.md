@@ -13,13 +13,14 @@ Test manual zscaler config
 scp -r -i .vagrant/machines/master/virtualbox/private_key ./config_asset vagrant@192.168.56.100:/home/vagrant/
 ssh -i .vagrant/machines/master/virtualbox/private_key vagrant@192.168.56.100 chmod +x ./config_asset/zscaler_setup.sh
 ssh -i .vagrant/machines/master/virtualbox/private_key vagrant@192.168.56.100 ./config_asset/zscaler_setup.sh
-ssh vagrant@192.168.56.100
+ssh vagrant@192.168.56.100 /home/vagrant
 ssh vagrant@192.168.56.102 
 
 
 cd /etc/ansible
 ansible-playbook playbooks/test.yml 
-
+ansible-playbook playbooks/setup.yml 
+vagrant reload
 
 
 
@@ -30,15 +31,12 @@ ansible/
 │   ├── setup-k8s.yml         
 │   └── verify-k8s.yml         
 │
-├── roles/
-│   ├── common/               
-│   ├── k8s-master/           
-│   └── k8s-worker/           
+├── roles        
 │
 ├── inventory/
 │   └── hosts.ini             
 │
-├── group_vars/
+├── vars/
 │   └── all.yml                
 │
 └── ansible.cfg

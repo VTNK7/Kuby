@@ -1,0 +1,12 @@
+# roles/common/defaults/main.yml
+---
+# System parameters
+disable_swap: true
+enable_modules:
+  - br_netfilter
+  - overlay
+sysctl_params:
+  - { name: "net.bridge.bridge-nf-call-ip6tables", value: 1 }
+  - { name: "net.bridge.bridge-nf-call-iptables", value: 1 }
+  - { name: "net.ipv4.ip_forward", value: 1 }
+  - { name: "vm.swappiness", value: 0 }

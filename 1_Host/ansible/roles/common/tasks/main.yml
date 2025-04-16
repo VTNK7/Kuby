@@ -1,0 +1,61 @@
+# roles/common/tasks/main.yml
+---
+
+- name: Debug variables
+  debug:
+    msg: 
+      - "disable_swap: {{ disable_swap | default('NOT SET') }}"
+      - "enable_modules: {{ enable_modules | default('NOT SET') }}"
+      - "sysctl_params: {{ sysctl_params | default('NOT SET') }}"
+    
+- name: Update apt cache
+  apt:
+    update_cache: yes
+    cache_valid_time: 3600
+
+- name: Install basic packages
+  apt:
+    name:
+      - apt-transport-https
+      - ca-certificates
+      - curl
+      - gnupg
+      - lsb-release
+      - software-properties-common
+    state: present
+
+- name: Disable swap
+  when: disable_swap | default(true)
+  block:
+    - name: Disable swap immediately
+      command: swapoff -a
+      changed_when: false
+
+    - name: Comment out swap lines in fstab
+      replace:
+        path: /etc/fstab
+        regexp: '^([^#].*\sswap\s+.*)$'
+        replace: '# \1'
+
+- name: Load required kernel modules
+  modprobe:
+    name: "{{ item }}"
+    state: present
+  loop: "{{ enable_modules | default([]) }}"
+
+- name: Ensure modules are loaded at boot
+  copy:
+    dest: "/etc/modules-load.d/kubernetes.conf"
+    content: |
+      {% for module in enable_modules | default([]) %}
+      {{ module }}
+      {% endfor %}
+    mode: '0644'
+
+- name: Configure sysctl parameters
+  sysctl:
+    name: "{{ item.name }}"
+    value: "{{ item.value }}"
+    state: present
+    reload: yes
+  loop: "{{ sysctl_params | default([]) }}"
