@@ -1,0 +1,86 @@
+---
+# Rôle Ansible pour installer Kubernetes sur Debian
+# tasks/main.yml
+
+# Supprimer les dépôts existants qui pourraient causer des problèmes
+- name: Remove existing Kubernetes repository configuration
+  file:
+    path: /etc/apt/sources.list.d/kubernetes.list
+    state: absent
+  become: true
+
+- name: Mise à jour du cache apt initial
+  apt:
+    update_cache: yes
+    cache_valid_time: 3600
+  become: true
+
+- name: Installation des dépendances
+  apt:
+    name:
+      - apt-transport-https
+      - ca-certificates
+      - curl
+      - gpg
+    state: present
+    install_recommends: no
+  become: true
+
+- name: Ensure keyrings directory exists
+  file:
+    path: /etc/apt/keyrings
+    state: directory
+    mode: '0755'
+  become: true
+
+- name: Download Kubernetes signing key to file
+  get_url:
+    url: https://pkgs.k8s.io/core:/stable:/v1.33/deb/Release.key
+    dest: /tmp/k8s.key
+    mode: '0644'
+  become: true
+
+- name: Import Kubernetes signing key and force overwrite
+  shell: |
+    rm -f /etc/apt/keyrings/kubernetes-apt-keyring.gpg && cat /tmp/k8s.key | gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg
+  become: true
+  args:
+    executable: /bin/bash
+
+- name: Set permissions on the key
+  file:
+    path: /etc/apt/keyrings/kubernetes-apt-keyring.gpg
+    mode: "0644"
+  become: true
+
+- name: Add the Kubernetes apt repository
+  shell: |
+    echo 'deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v1.33/deb/ /' | tee /etc/apt/sources.list.d/kubernetes.list
+  become: true
+
+- name: Update apt package index
+  apt:
+    update_cache: yes
+  become: true
+
+- name: Install Kubernetes packages
+  apt:
+    name:
+      - kubelet
+      - kubeadm
+      - kubectl
+    state: present
+    install_recommends: no
+  become: true
+
+- name: Hold Kubernetes packages
+  shell: |
+    apt-mark hold kubelet kubeadm kubectl
+  become: true
+
+- name: Enable kubelet service
+  systemd:
+    name: kubelet
+    enabled: yes
+    state: started
+  become: true

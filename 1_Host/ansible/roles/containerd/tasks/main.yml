@@ -134,3 +134,143 @@
         path: /tmp/cni-plugins.tgz
         state: absent
       when: download_cni.changed | default(false)
+
+
+- name: Setup Systemd service for containerd
+  block:
+        # Configuration de systemd pour containerd sur Debian
+    - name: Ensure directory for systemd unit files exists
+      file:
+        path: /usr/local/lib/systemd/system/
+        state: directory
+        mode: '0755'
+        recurse: yes
+
+    - name: Check if containerd systemd service file exists
+      stat:
+        path: /usr/local/lib/systemd/system/containerd.service
+      register: service_file_check
+
+    - name: Download containerd systemd service file
+      get_url:
+        url: https://raw.githubusercontent.com/containerd/containerd/main/containerd.service
+        dest: /usr/local/lib/systemd/system/containerd.service
+        mode: '0644'
+      register: service_file_download
+      when: not service_file_check.stat.exists
+
+    - name: Create containerd configuration directory
+      file:
+        path: /etc/containerd
+        state: directory
+        mode: '0755'
+
+    - name: Check if containerd config exists
+      stat:
+        path: /etc/containerd/config.toml
+      register: config_exists
+
+    - name: Generate default containerd config
+      command: containerd config default
+      register: default_config
+      changed_when: false
+      when: not config_exists.stat.exists
+
+    - name: Create temporary file for config
+      tempfile:
+        state: file
+        suffix: config.toml
+      register: temp_config
+      when: not config_exists.stat.exists
+
+    - name: Write default config to temporary file
+      copy:
+        content: "{{ default_config.stdout }}"
+        dest: "{{ temp_config.path }}"
+      when: not config_exists.stat.exists
+
+    - name: Set systemd cgroup driver in containerd config
+      replace:
+        path: "{{ temp_config.path if not config_exists.stat.exists else '/etc/containerd/config.toml' }}"
+        regexp: 'SystemdCgroup = false'
+        replace: 'SystemdCgroup = true'
+      register: cgroup_updated
+      when: temp_config.path is defined or config_exists.stat.exists
+
+    - name: Write final containerd config
+      copy:
+        src: "{{ temp_config.path }}"
+        dest: /etc/containerd/config.toml
+        remote_src: yes
+        mode: '0644'
+      when: not config_exists.stat.exists
+      register: config_written
+
+    - name: Remove temporary config file
+      file:
+        path: "{{ temp_config.path }}"
+        state: absent
+      when: temp_config.path is defined
+
+    - name: Create systemd override directory
+      file:
+        path: /etc/systemd/system/containerd.service.d
+        state: directory
+        mode: '0755'
+
+    - name: Create override file for containerd service
+      copy:
+        content: |
+          [Service]
+          ExecStart=
+          ExecStart=/usr/bin/containerd
+        dest: /etc/systemd/system/containerd.service.d/override.conf
+        mode: '0644'
+      register: override_created
+
+    - name: Reload systemd daemon
+      systemd:
+        daemon_reload: yes
+      when: service_file_download.changed | default(false) or cgroup_updated.changed | default(false) or config_written.changed | default(false) or override_created.changed
+
+    - name: Enable and start containerd service
+      systemd:
+        name: containerd
+        state: restarted
+        enabled: yes
+      when: service_file_download.changed | default(false) or cgroup_updated.changed | default(false) or config_written.changed | default(false) or override_created.changed
+
+    # Configuration de l'hôte pour utiliser le même cgroup driver
+    - name: Check if kubelet is installed
+      command: which kubelet
+      register: kubelet_check
+      changed_when: false
+      failed_when: false
+      check_mode: no
+
+    - name: Create kubelet configuration directory
+      file:
+        path: /var/lib/kubelet/
+        state: directory
+        mode: '0755'
+      when: kubelet_check.rc == 0
+
+    - name: Create kubelet config file with systemd cgroup driver
+      copy:
+        dest: /var/lib/kubelet/config.yaml
+        content: |
+          apiVersion: kubelet.config.k8s.io/v1beta1
+          kind: KubeletConfiguration
+          cgroupDriver: systemd
+          resolvConf: /run/systemd/resolve/resolv.conf
+        mode: '0644'
+      when: kubelet_check.rc == 0
+      register: kubelet_config
+
+    - name: Restart kubelet if installed and config changed
+      systemd:
+        name: kubelet
+        state: restarted
+        enabled: yes
+      when: kubelet_check.rc == 0 and kubelet_config.changed
+      ignore_errors: yes
