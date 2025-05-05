@@ -1,18 +1,37 @@
 # roles/common/tasks/main.yml
 ---
-
 - name: Debug variables
   debug:
-    msg: 
+    msg:
       - "disable_swap: {{ disable_swap | default('NOT SET') }}"
       - "enable_modules: {{ enable_modules | default('NOT SET') }}"
       - "sysctl_params: {{ sysctl_params | default('NOT SET') }}"
-    
+   
+- name: Check for Docker repository without GPG key
+  stat:
+    path: /etc/apt/sources.list.d/docker.list
+  register: docker_repo_check
+
+- name: Check for Docker GPG key
+  stat:
+    path: /etc/apt/keyrings/docker.asc
+  register: docker_key_check
+  when: docker_repo_check.stat.exists
+
+- name: Temporarily disable Docker repository if key is missing
+  command: mv /etc/apt/sources.list.d/docker.list /etc/apt/sources.list.d/docker.list.disabled
+  when: docker_repo_check.stat.exists and (not docker_key_check.stat.exists | default(false))
+  register: repo_disabled
+
 - name: Update apt cache
   apt:
     update_cache: yes
     cache_valid_time: 3600
 
+- name: Restore Docker repository if it was disabled
+  command: mv /etc/apt/sources.list.d/docker.list.disabled /etc/apt/sources.list.d/docker.list
+  when: repo_disabled.changed | default(false)
+    
 - name: Install basic packages
   apt:
     name:
@@ -22,26 +41,54 @@
       - gnupg
       - lsb-release
       - software-properties-common
+      - wget
     state: present
+    update_cache: no  # Déjà fait dans la tâche précédente
 
 - name: Disable swap
   when: disable_swap | default(true)
   block:
+    - name: Check current swap status
+      command: grep -q "^[^#].*\sswap\s" /etc/fstab
+      register: swap_enabled
+      failed_when: false
+      changed_when: false
+      check_mode: no
+
     - name: Disable swap immediately
       command: swapoff -a
-      changed_when: false
+      when: swap_enabled.rc == 0
+      changed_when: swap_enabled.rc == 0
 
     - name: Comment out swap lines in fstab
       replace:
         path: /etc/fstab
         regexp: '^([^#].*\sswap\s+.*)$'
         replace: '# \1'
+      register: fstab_changed
+
+- name: Check for loaded kernel modules
+  shell: lsmod | grep -q "^{{ item }}"
+  register: modules_loaded
+  failed_when: false
+  changed_when: false
+  loop: "{{ enable_modules | default([]) }}"
+  check_mode: no
 
 - name: Load required kernel modules
   modprobe:
-    name: "{{ item }}"
+    name: "{{ item.item }}"
     state: present
-  loop: "{{ enable_modules | default([]) }}"
+  loop: "{{ modules_loaded.results }}"
+  when: item.rc != 0
+  register: modules_result
+
+- name: Ensure modules configuration directory exists
+  file:
+    path: "/etc/modules-load.d"
+    state: directory
+    mode: '0755'
+  when: enable_modules | default([]) | length > 0
 
 - name: Ensure modules are loaded at boot
   copy:
@@ -51,6 +98,7 @@
       {{ module }}
       {% endfor %}
     mode: '0644'
+  when: enable_modules | default([]) | length > 0
 
 - name: Configure sysctl parameters
   sysctl:

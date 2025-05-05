@@ -18,7 +18,7 @@ ssh vagrant@192.168.56.102
 
 
 cd /etc/ansible
-ansible-playbook playbooks/test.yml 
+ansible-playbook playbooks/test_ssh.yml 
 ansible-playbook playbooks/setup.yml 
 vagrant reload
 

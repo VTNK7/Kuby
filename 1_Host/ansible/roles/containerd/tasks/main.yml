@@ -1,44 +1,136 @@
-# roles/containerd/tasks/main.yml
 ---
-- name: Add the official Docker GPG key
-  ansible.builtin.command:
-    cmd: "curl -fsSL https://download.docker.com/linux/debian/gpg | gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg"
-    creates: /usr/share/keyrings/docker-archive-keyring.gpg
+- name: Download and install Containerd
+  block:
+    # Suivant exactement la documentation officielle
+    - name: Update APT package cache
+      apt:
+        update_cache: yes
+        cache_valid_time: 3600
 
-- name: Add the Docker repository
-  apt_repository:
-    repo: "deb [arch=amd64 signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/debian {{ ansible_distribution_release }} stable"
-    state: present
-    filename: docker
+    - name: Ensure ca-certificates and curl are installed
+      apt:
+        name:
+          - ca-certificates
+          - curl
+        state: present
 
-- name: Install containerd
-  apt:
-    name: containerd.io
-    state: present
-    update_cache: yes
+    - name: Create keyrings directory
+      file:
+        path: /etc/apt/keyrings
+        state: directory
+        mode: '0755'
 
-- name: Create containerd configuration directory
-  file:
-    path: /etc/containerd
-    state: directory
-    mode: '0755'
+    - name: Download Docker's official GPG key
+      command: >
+        curl -fsSL https://download.docker.com/linux/debian/gpg 
+        -o /etc/apt/keyrings/docker.asc
 
-- name: Generate default containerd configuration
-  shell: containerd config default > /etc/containerd/config.toml
-  args:
-    creates: /etc/containerd/config.toml
-  notify: Redémarrer containerd
+    - name: Set permissions for GPG key
+      file:
+        path: /etc/apt/keyrings/docker.asc
+        mode: 'a+r'
 
-- name: Configure cgroup driver for systemd
-  replace:
-    path: /etc/containerd/config.toml
-    regexp: 'SystemdCgroup = false'
-    replace: 'SystemdCgroup = true'
-  notify: Redémarrer containerd
+    - name: Get Debian version
+      shell: . /etc/os-release && echo "$VERSION_CODENAME"
+      register: debian_version
+      changed_when: false
+      check_mode: no
 
-- name: Ensure containerd is enabled and started
-  systemd:
-    name: containerd
-    state: started
-    enabled: yes
-    daemon_reload: yes
+    - name: Get architecture
+      shell: dpkg --print-architecture
+      register: architecture
+      changed_when: false
+      check_mode: no
+
+    - name: Add Docker repository to APT sources
+      shell: >
+        echo "deb [arch={{ architecture.stdout }} signed-by=/etc/apt/keyrings/docker.asc] 
+        https://download.docker.com/linux/debian {{ debian_version.stdout }} stable" | 
+        tee /etc/apt/sources.list.d/docker.list > /dev/null
+      args:
+        creates: /etc/apt/sources.list.d/docker.list
+
+    - name: Update APT cache after adding repository
+      apt:
+        update_cache: yes
+      register: apt_update
+      until: apt_update is not failed
+      retries: 5
+      delay: 10
+
+    - name: Install containerd.io
+      apt:
+        name: containerd.io
+        state: present
+      register: containerd_install
+
+    # Configuration de containerd
+    - name: Create containerd config directory
+      file:
+        path: /etc/containerd
+        state: directory
+        mode: '0755'
+
+    - name: Generate default containerd config
+      shell: containerd config default
+      register: default_config
+      changed_when: false
+      check_mode: no
+
+    - name: Configure containerd
+      copy:
+        content: "{{ default_config.stdout }}"
+        dest: /etc/containerd/config.toml
+        mode: '0644'
+      register: config_written
+      when: containerd_install.changed or not ansible_check_mode
+
+    - name: Restart containerd
+      service:
+        name: containerd
+        state: restarted
+        enabled: yes
+      when: config_written.changed or containerd_install.changed
+
+- name: Download and install CNI plugins
+  block:
+    - name: Create directory for CNI plugins
+      file:
+        path: /opt/cni/bin
+        state: directory
+        mode: '0755'
+
+    - name: Check if CNI plugins are already installed
+      find:
+        paths: /opt/cni/bin
+        file_type: file
+        patterns: "*"
+      register: cni_files
+
+    - name: Set CNI plugin URL
+      set_fact:
+        cni_url: "https://github.com/containernetworking/plugins/releases/download/v1.2.0/cni-plugins-linux-{{ 'amd64' if ansible_architecture == 'x86_64' else ansible_architecture }}-v1.2.0.tgz"
+
+    - name: Download CNI plugins
+      get_url:
+        url: "{{ cni_url }}"
+        dest: /tmp/cni-plugins.tgz
+        mode: '0644'
+      register: download_cni
+      until: download_cni is not failed
+      retries: 5
+      delay: 10
+      when: cni_files.matched == 0
+
+    - name: Extract CNI plugins
+      unarchive:
+        src: /tmp/cni-plugins.tgz
+        dest: /opt/cni/bin
+        remote_src: yes
+      when: cni_files.matched == 0
+
+    - name: Remove downloaded archive
+      file:
+        path: /tmp/cni-plugins.tgz
+        state: absent
+      when: download_cni.changed | default(false)
