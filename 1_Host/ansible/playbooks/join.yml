@@ -1,12 +1,3 @@
----
-- name: Configure base system
-  hosts: all
-  become: true
-  roles:
-    - common
-    - containerd
-    - kubernetes
-
 - name: Init k8s master node
   hosts: master
   become: true
@@ -18,5 +9,3 @@
   become: true
   roles:
     - k8s_worker
-
-

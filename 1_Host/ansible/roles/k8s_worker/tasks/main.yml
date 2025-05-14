@@ -1,0 +1,10 @@
+---
+- name: Include join command variables
+  include_vars:
+    file: "{{ playbook_dir }}/../vars/k8s_join.yml"
+
+- name: Join worker node to Kubernetes cluster
+  shell: "{{ k8s_join_command }}"
+  args:
+    creates: /etc/kubernetes/kubelet.conf
+  become: true

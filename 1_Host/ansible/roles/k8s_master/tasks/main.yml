@@ -1,0 +1,69 @@
+# [autres tâches d'initialisation du cluster...]
+- name: Check if Kubernetes is already initialized
+  shell: kubectl get nodes
+  register: kubeadm_check
+  failed_when: false
+  changed_when: false
+
+- name: Initialize Kubernetes cluster
+  shell: kubeadm init --pod-network-cidr={{ pod_network_cidr }} --apiserver-advertise-address={{ master_ip }}
+  when: kubeadm_check.rc != 0
+  register: kubeadm_init_output
+
+
+- name: Create .kube directory for root user
+  file:
+    path: /root/.kube
+    state: directory
+    mode: '0700'
+
+- name: Save kubeconfig for root user
+  copy:
+    src: /etc/kubernetes/admin.conf
+    dest: /root/.kube/config
+    remote_src: yes
+
+- name: Create .kube directory for current user
+  file:
+    path: "{{ ansible_env.HOME }}/.kube"
+    state: directory
+    mode: '0700'
+  when: kubeadm_check.rc != 0
+
+- name: Save kubeconfig for current user
+  copy:
+    src: /etc/kubernetes/admin.conf
+    dest: "{{ ansible_env.HOME }}/.kube/config"
+    remote_src: yes
+
+- name: Install Calico network plugin
+  shell: kubectl apply -f https://raw.githubusercontent.com/projectcalico/calico/v3.26.1/manifests/calico.yaml
+
+- name: Wait for Calico pods to be ready
+  shell: kubectl wait --for=condition=Ready pods -l k8s-app=calico-node -n kube-system --timeout=300s
+  register: calico_ready
+  retries: 10
+  delay: 30
+  until: calico_ready.rc == 0
+  failed_when: false
+
+- name: Generate join command
+  shell: kubeadm token create --print-join-command
+  register: join_command_raw
+  changed_when: false
+
+- name: Create vars directory if it doesn't exist
+  delegate_to: localhost
+  become: false
+  file:
+    path: "{{ playbook_dir }}/../vars"
+    state: directory
+    mode: '0755'
+
+- name: Store join command in variables file
+  delegate_to: localhost
+  become: false
+  copy:
+    content: "k8s_join_command: '{{ join_command_raw.stdout }}'"
+    dest: "{{ playbook_dir }}/../vars/k8s_join.yml"
+    mode: '0644'
