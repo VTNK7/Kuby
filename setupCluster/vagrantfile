@@ -1,7 +1,5 @@
 # -*- mode: ruby -*-
 # vi: set ft=ruby :
-run_ansible = ENV['RUN_ANSIBLE'] == "true"
-
 Vagrant.configure("2") do |config|
   
   # Configuration commune
@@ -42,45 +40,39 @@ Vagrant.configure("2") do |config|
       cp /home/vagrant/.ssh/id_rsa.pub /vagrant/jumpbox_id_rsa.pub
     SHELL
 
-    # Provisioning conditionnel pour exécuter Ansible en fonction de la variable d'environnement
-    if run_ansible
-      jumpbox.vm.provision "shell", inline: <<-SHELL
-        echo "Exécution du playbook Ansible demandée par l'utilisateur..."
-        su - vagrant -c "cd /etc/ansible && ansible-playbook playbooks/setup.yml"
-      SHELL, run: "always", privileged: true
-    end
   end
 
-  config.vm.define "master" do |master|
-    master.vm.hostname = "master"
-    master.vm.network "private_network", ip: "#{private_network_prefix}.106"
-    master.vm.provider "virtualbox" do |vb|
-      vb.memory = "2048"
-      vb.cpus = 2
-    end
-    
 
-    # Copier le dossier config_asset vers la machine virtuelle
-    master.vm.provision "file", source: "./config_asset/", destination: "/tmp/config_asset"
-  
-    # Installation d'Ansible et des outils nécessaires
-    master.vm.provision "shell", inline: <<-SHELL
-      # Exécution du script Zscaler pour mettre à jour les certificats
-      chmod +x /tmp/config_asset/zscaler_setup.sh
-      /tmp/config_asset/zscaler_setup.sh
+      config.vm.define "master" do |master|
+        master.vm.hostname = "master"
+        master.vm.network "private_network", ip: "#{private_network_prefix}.106"
+        master.vm.provider "virtualbox" do |vb|
+          vb.memory = "2048"
+          vb.cpus = 2
+        end
+        
+
+        # Copier le dossier config_asset vers la machine virtuelle
+        master.vm.provision "file", source: "./config_asset/", destination: "/tmp/config_asset"
+      
+        # Installation d'Ansible et des outils nécessaires
+        master.vm.provision "shell", inline: <<-SHELL
+          # Exécution du script Zscaler pour mettre à jour les certificats
+          chmod +x /tmp/config_asset/zscaler_setup.sh
+          /tmp/config_asset/zscaler_setup.sh
 
 
-      apt-get update
-      # Copier la clé publique de jumpbox
-      if [ -f /vagrant/jumpbox_id_rsa.pub ]; then
-        mkdir -p /home/vagrant/.ssh
-        cat /vagrant/jumpbox_id_rsa.pub >> /home/vagrant/.ssh/authorized_keys
-        chmod 700 /home/vagrant/.ssh
-        chmod 600 /home/vagrant/.ssh/authorized_keys
-        chown vagrant:vagrant /home/vagrant/.ssh/authorized_keys
-      fi
-    SHELL
-  end
+          apt-get update
+          # Copier la clé publique de jumpbox
+          if [ -f /vagrant/jumpbox_id_rsa.pub ]; then
+            mkdir -p /home/vagrant/.ssh
+            cat /vagrant/jumpbox_id_rsa.pub >> /home/vagrant/.ssh/authorized_keys
+            chmod 700 /home/vagrant/.ssh
+            chmod 600 /home/vagrant/.ssh/authorized_keys
+            chown vagrant:vagrant /home/vagrant/.ssh/authorized_keys
+          fi
+        SHELL
+      end
 
       
       # Workers
@@ -116,5 +108,5 @@ Vagrant.configure("2") do |config|
           SHELL
         end
       end
-    end
+
 end

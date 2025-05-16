@@ -3,26 +3,23 @@
 Create a vagrant configuration that sets up ssh and ansible on vms
 To be able to configure the jumpbox with ansible afterwards
 
-# Commands
-Vagrant up
+# Setup
 
-Test ssh
-ssh -i .vagrant/machines/jumpbox/virtualbox/private_key vagrant@192.168.56.10 
+Installer virtualbox
+Installer vagrant
 
-Test manual zscaler config
-scp -r -i .vagrant/machines/master/virtualbox/private_key ./config_asset vagrant@192.168.56.100:/home/vagrant/
-ssh -i .vagrant/machines/master/virtualbox/private_key vagrant@192.168.56.100 chmod +x ./config_asset/zscaler_setup.sh
-ssh -i .vagrant/machines/master/virtualbox/private_key vagrant@192.168.56.100 ./config_asset/zscaler_setup.sh
-ssh vagrant@192.168.56.100 /home/vagrant
-ssh vagrant@192.168.56.102 
+Pour créer les vm avec vagrant sur virtualbox :
+vagrant up
 
+Pour se connecter aux vm :
+vagrant ssh nomvm
 
-cd /etc/ansible
-ansible-playbook playbooks/test_ssh.yml 
-ansible-playbook playbooks/setup.yml 
-vagrant reload
+Faire le script de paul pour le certificat ssl/tls
 
+Copier le certificat zscaler.cer et le script zscaler_setup.sh sur les machines dans home/vagrant
 
+chmod +x ./zscaler_setup.sh
+./zscaler_setup.sh
 
 # Structure
 
@@ -41,6 +38,22 @@ ansible/
 │
 └── ansible.cfg
 
+# Tests
+
+vagrant up
+vagrant ssh jumpbox
+cd /etc/ansible
+ansible-playbook playbooks/setup.yml 
+
+vagrant ssh master
+kubectl get nodes
+kubectl get pods --all-namespaces
+
+kubectl create deployment nginx-dep --image=nginx
+kubectl expose deployment nginx-dep --type=NodePort --port=80
+
+kubectl get deployments
+kubectl get services
 
 # Prompts
 
@@ -61,10 +74,3 @@ Goals:
     CD Pipeline with ArgoCD:
         Use a configuration repository (repoB) to manage Kubernetes manifests.
         Deploy new images to the Kubernetes cluster based on updates in repoB.
-
-Pour lancer ansible directement apres vagrant :
-RUN_ANSIBLE=true vagrant up
-
-
-power shell : 
-$env:RUN_ANSIBLE="true"; vagrant up
