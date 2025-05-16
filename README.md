@@ -1,4 +1,6 @@
 # Objective
+Craft a kube cluster
+
 
 Create a vagrant configuration that sets up ssh and ansible on vms
 To be able to configure the jumpbox with ansible afterwards
