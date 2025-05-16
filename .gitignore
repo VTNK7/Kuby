@@ -50,4 +50,6 @@ service-account-csr.json
 *.swp
 .idea/
 setupCluster/.vagrant
+setupCluster/ansible/vars/*
+
 
