@@ -1,1 +1,1 @@
-k8s_join_command: 'kubeadm join 192.168.56.106:6443 --token dci4s1.zkgaz5x1eshesjxm --discovery-token-ca-cert-hash sha256:dd0535951ba5db00bb91d95ddfd70faca64cd07e18b7b347ffbe2df7255558b0 '
+k8s_join_command: 'kubeadm join 192.168.56.106:6443 --token zk15d3.imp3iiqrc53mevyf --discovery-token-ca-cert-hash sha256:cf782ef30abf3d38f940c1035df8326a43d3fc5bc93e5889b750bbeb98c618de '

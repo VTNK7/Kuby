@@ -76,3 +76,7 @@ Goals:
     CD Pipeline with ArgoCD:
         Use a configuration repository (repoB) to manage Kubernetes manifests.
         Deploy new images to the Kubernetes cluster based on updates in repoB.
+
+# Bugs
+
+zscaler_setup must be CF and not CRLF

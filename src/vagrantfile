@@ -27,8 +27,8 @@ Vagrant.configure("2") do |config|
       /tmp/config_asset/zscaler_setup.sh
   
       # Installation des packages
-      apt-get update
-      apt-get install -y ansible python3-pip curl wget
+      apt update
+      apt install -y ansible python3-pip curl wget
       pip3 install netaddr jmespath
   
       # Générer une nouvelle paire de clés SSH pour Ansible
@@ -62,7 +62,7 @@ Vagrant.configure("2") do |config|
           /tmp/config_asset/zscaler_setup.sh
 
 
-          apt-get update
+          apt update
           # Copier la clé publique de jumpbox
           if [ -f /vagrant/jumpbox_id_rsa.pub ]; then
             mkdir -p /home/vagrant/.ssh
@@ -96,7 +96,7 @@ Vagrant.configure("2") do |config|
             /tmp/config_asset/zscaler_setup.sh
   
   
-            apt-get update
+            apt update
             # Copier la clé publique de jumpbox
             if [ -f /vagrant/jumpbox_id_rsa.pub ]; then
               mkdir -p /home/vagrant/.ssh
