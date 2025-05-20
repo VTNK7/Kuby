@@ -123,5 +123,5 @@ http://192.168.56.106:30007
 
 # State
 
-Curent argocd working with base image nginx
+Curent argocd working with base image nginx and docker file
 
