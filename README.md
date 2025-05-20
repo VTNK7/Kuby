@@ -91,18 +91,35 @@ kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/st
 
 kubectl get pod -n argocd 
 kubectl get svc -n argocd
+
+## Port forwarding
 kubectl port-forward svc/argocd-server -n argocd 8080:443
 kubectl rollout restart deployment -n argocd
-kubectl get pods -n argocd -w
 
+Error : root@master:/home/vagrant# kubectl port-forward svc/argocd-server -n argocd 8080:443
+error: error upgrading connection: unable to upgrade connection: pod does not exist
 
-kubectl delete namespace argocd
-kubectl create namespace argocd
-kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
+## Load Balancer
+kubectl patch svc argocd-server -n argocd -p '{"spec": {"type": "LoadBalancer"}}'
+kubectl get svc argocd-server -n argocd
+https://<ipmaster>:<portsvc>/
 
+## Login
+kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath="{.data.password}" | base64 -d; echo
 
-kubectl port-forward pod/argocd-server-7c7b869b8d-9k2dk -n argocd 8080:443
+admin
+password
+
+## conf
+
+Add gitlab repo with ssh
+Create app
+
+kubectl create namespace dekans
+kubectl get deployments -n dekans
+
 
 # State
 
-Cluster fonctionnel argocd non :(
+
+
