@@ -118,8 +118,10 @@ Create app
 kubectl create namespace dekans
 kubectl get deployments -n dekans
 
+http://<ipmaster>:<nodeport>
+http://192.168.56.106:30007
 
 # State
 
-
+Curent argocd working with base image nginx
 
